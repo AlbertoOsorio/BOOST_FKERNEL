@@ -2,7 +2,7 @@ using CUDA
 using LinearAlgebra
 
 
-function _obj_func!(fieldmap, B, by_min, by_max, grad_rms, Gx, Gy, Gz, d,   # Valores base y alocaciones
+function _old_obj_func!(fieldmap, B, by_min, by_max, grad_rms, Gx, Gy, Gz, d,   # Valores base y alocaciones
                 X, Y, Z, nx, ny, nz,                                        # Grid de evaluación
                 P, M, m,                                                    # Pos y θ de vec momento dipolo
                 mask)
@@ -64,9 +64,9 @@ end
     # Cargamos punto de eval
     Rx, Ry, Rz = 0.0f0, 0.0f0, 0.0f0
     if idx <= N
-        Rx = X[i,j,k]
-        Ry = Y[i,j,k]
-        Rz = Z[i,j,k]
+        Rx = X[idx]
+        Ry = Y[idx]
+        Rz = Z[idx]
     end
 
     jb = 1

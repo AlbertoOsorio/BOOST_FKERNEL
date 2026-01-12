@@ -1,7 +1,6 @@
 ### BOOST es un script que recibe un fieldmap en mT y entrega un fieldmap en mT
 
-include("simulacion.jl")  
-include("f_obj_kernel.jl")
+include("stepbystep.jl")
 include("grid_utils.jl")
 include("ppms.jl")
 
@@ -10,11 +9,10 @@ using Evolutionary, Random, CUDA
 using DelimitedFiles, MAT
 using GLMakie
 
-file_lectura = matopen(string("C:/Users/Magritek/Desktop/shimmer/scripts/",name))
-fieldmap = read(file_lectura, "fieldmap_3d")   # B en mT cambiar a variable
-close(file_lectura)
-const FILE = "By_SH.jld2"                      # Ajusta si cambiaste el nombre
+const BATCH_M = 64
+const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre
 @load FILE By_grid xg yg zg modelBy x y z By   # Todo en mT y mm
+fieldmap = By_grid
 
 ## Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm
@@ -75,7 +73,7 @@ upper = fill(180.0, M)
 θ0    = 150.0 .* ones(M)
 μ_base = 0.52 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
-M_cpu = transpose(hcat(θ0, μ_base))
+M0_cpu = transpose(hcat(θ0, μ_base))
 P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
 
 # =======================
@@ -155,10 +153,8 @@ end
 
 function objective_gpu_allgpu_ranged(θ)
 
-    xg_mm, yg_mm, zg_mm = build_axes_mm(dims, resmm)
-    grid = make_grid_gpu_from_axes_mm(xg_mm, yg_mm, zg_mm)
     M_cpu = transpose(hcat(θ, μ_base))
-    m = size(M_cpu, 2)
+    m = Int32(size(M_cpu, 2))
 
     M = CuArray(M_cpu) 
     P = CuArray(P_cpu .* 0.001)
@@ -173,30 +169,63 @@ function objective_gpu_allgpu_ranged(θ)
     grad_rms = CuArray([0.0f0])
 
     threads = 256 
-    N = length(A_d)
+    N = length(grid.X)
     blocks = cld(N, threads) 
-    shmem_bytes = 3 * threads * sizeof(Float32) + 5 * BATCH_M * sizeof(Float32) 
+    shmem_bytes =  5 * BATCH_M * sizeof(Float32) + 3 * threads * sizeof(Float32) 
 
-    @cuda threads=threads blocks=blocks shmem=shmem_bytes _obj_func!(fieldmap, B, by_min, by_max, grad_rms, Gx, Gy, Gz, dy_m,   # Valores base y alocaciones
+    @cuda threads=threads blocks=blocks shmem=shmem_bytes _obj_func!(fld, B, by_min, by_max, grad_rms, Gx, Gy, Gz, dy_m,   # Valores base y alocaciones
                 grid.X, grid.Y, grid.Z, grid.nx, grid.ny, grid.nz,                                                              # Grid de evaluación
                 P, M, m,                                                                                                        # Pos y θ de vec momento dipolo
-                dmask)
+                msk)
     
     return w_range*(by_max-by_min) + w_grad*sqrt(grad_rms/Nmask)
 
 end
 
 
+fld = CuArray(fieldmap)
+msk = CuArray(dmask)
+
+xg_mm, yg_mm, zg_mm = build_axes_mm(dims, resmm)
+grid = make_grid_gpu_from_axes_mm(xg_mm, yg_mm, zg_mm)
+
+P = CuArray(P_cpu .* 0.001)
+B = similar(grid.X)
+
+Gx = similar(grid.X)
+Gy = similar(grid.X)
+Gz = similar(grid.X)
+
+by_min = CuArray([typemax(Float32)])
+by_max = CuArray([typemin(Float32)])
+grad_rms = CuArray([0.0f0])
+
+threads = 256 
+N = length(grid.X)
+blocks = cld(N, threads) 
+shmem_bytes =  5 * BATCH_M * sizeof(Float32) + 3 * threads * sizeof(Float32)
+
+function mintest()
+    M = CuArray(M0_cpu)
+    m = Int32(size(M0_cpu, 2))
+
+    @cuda threads=threads blocks=blocks shmem=shmem_bytes _obj_func!(fld, B, by_min, by_max, grad_rms, Gx, Gy, Gz, dy_m,   # Valores base y alocaciones
+                grid.X, grid.Y, grid.Z, grid.nx, grid.ny, grid.nz,                                                              # Grid de evaluación
+                P, M, m,                                                                                                        # Pos y θ de vec momento dipolo
+                msk)
+
+end
+
 # ---- enlaza con tu objetivo GPU ya definido arriba ----
-f_eval = θ -> objective_gpu_allgpu_ranged(θ)
+#f_eval = θ -> objective_gpu_allgpu_ranged(θ)
 
 
 
-bestf, bestθ, bestcampo_global = optimize_SA(f_eval; θ_init=θ0, iters=iteraciones, restarts=restarts_1,
-                           T0=0.05, alpha=0.995, step0=10.0, step_min=1.0,
-                           report_every=100)
+#bestf, bestθ, bestcampo_global = optimize_SA(f_eval; θ_init=θ0, iters=iteraciones, restarts=restarts_1,
+#                           T0=0.05, alpha=0.995, step0=10.0, step_min=1.0,
+#                           report_every=100)
 
 
-println("Optimizacion terminada")
-println("fmin = ", bestf)
-println("rotaciones (deg) = ", (DISC_5 ? disc5(bestθ) : bestθ)[1:min(10,end)])
+#println("Optimizacion terminada")
+#println("fmin = ", bestf)
+#println("rotaciones (deg) = ", (DISC_5 ? disc5(bestθ) : bestθ)[1:min(10,end)])
