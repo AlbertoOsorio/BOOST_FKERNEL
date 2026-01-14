@@ -1,6 +1,6 @@
 ### BOOST es un script que recibe un fieldmap en mT y entrega un fieldmap en mT
 
-include("f_obj_kernel.jl")
+include("std_kernel.jl")
 include("utils/grid_utils.jl")
 include("utils/ppms.jl")
 
@@ -53,6 +53,7 @@ tol  = 1e-3 * Δ
 mask_shell_bool = (rgrid .>= (Rmin - tol)) .& (rgrid .<= (Rmax + tol))
 dmask    = Float32.(mask_shell_bool)                
 
+
 # resoluciones en metros
 dx_m = Float32(dx * 1e-3)
 dy_m = Float32(dy * 1e-3)
@@ -71,7 +72,7 @@ M = length(posiciones)
 lower = fill(0.0,   M)                  # grados
 upper = fill(180.0, M)
 θ0    = 150.0 .* ones(M)
-μ_base = 0.52 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
+μ_base = 1.52 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
 M0_cpu = transpose(hcat(θ0, μ_base))
 P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
@@ -151,40 +152,12 @@ function optimize_SA(f; θ_init=θ0, lower=lower, upper=upper,
     return bestf_global, bestθ_global
 end
 
-function objective_gpu_allgpu_ranged(θ)
-
-    M_cpu = transpose(hcat(θ, μ_base))
-    m = Int32(size(M_cpu, 2))
-
-    M = CuArray(M_cpu) 
-    P = CuArray(P_cpu .* 0.001)
-    B = similar(grid.X)
-
-    Gx = similar(grid.X)
-    Gy = similar(grid.X)
-    Gz = similar(grid.X)
-
-    by_min = CuArray([typemax(Float32)])
-    by_max = CuArray([typemin(Float32)])
-    grad_rms = CuArray([0.0f0])
-
-    threads = 256 
-    N = length(grid.X)
-    blocks = cld(N, threads) 
-    shmem_bytes =  5 * BATCH_M * sizeof(Float32) + 3 * threads * sizeof(Float32) 
-
-    @cuda threads=threads blocks=blocks shmem=shmem_bytes _obj_func!(fld, B, by_min, by_max, grad_rms, Gx, Gy, Gz, dy_m,   # Valores base y alocaciones
-                grid.X, grid.Y, grid.Z, grid.nx, grid.ny, grid.nz,                                                              # Grid de evaluación
-                P, M, m,                                                                                                        # Pos y θ de vec momento dipolo
-                msk)
-    
-    return w_range*(by_max-by_min) + w_grad*sqrt(grad_rms/Nmask)
-
-end
-
 
 fld = CuArray(fieldmap)
 msk = CuArray(dmask)
+
+masked_count(dmask::CuArray{TM,3}) where {TM<:AbstractFloat} = Float64(CUDA.sum(dmask))
+Nmsk   = Float32(masked_count(msk))
 
 xg_mm, yg_mm, zg_mm = build_axes_mm(dims, resmm)
 grid = make_grid_gpu_from_axes_mm(xg_mm, yg_mm, zg_mm)
@@ -192,32 +165,30 @@ grid = make_grid_gpu_from_axes_mm(xg_mm, yg_mm, zg_mm)
 P = CuArray(P_cpu .* 0.001)
 B = similar(grid.X)
 
-Gx = similar(grid.X)
-Gy = similar(grid.X)
-Gz = similar(grid.X)
+by_mean = CuArray([0.0f0])
+stdiv = CuArray([0.0f0])
 
-by_min = CuArray([typemax(Float32)])
-by_max = CuArray([typemin(Float32)])
-grad_rms = CuArray([0.0f0])
 
 threads = 256 
-N = Int32(length(grid.X))
+N = length(grid.X)
 blocks = cld(N, threads) 
 shmem =  5 * BATCH_M * sizeof(Float32)
-shmem_bytes = 3 * threads * sizeof(Float32) 
-M = CuArray(M0_cpu)
-m = Int32(size(M0_cpu, 2))
+shmem_sum = threads * sizeof(Float32)
+
+
+
 
 function mintest()
+    M = CuArray(M0_cpu)
+    m = Int32(size(M0_cpu, 2))
+    @cuda threads=threads blocks=blocks shmem=shmem  _Btotmasked!(fld, B,                                              # Valores base y alocaciones
+                                                                grid.X, grid.Y, grid.Z, grid.nx, grid.ny, grid.nz,     # Grid de evaluación
+                                                                P, M, m,                                               # Pos y θ de vec momento dipolo
+                                                                msk)                                                   # Máscara
 
-    @cuda threads=threads blocks=blocks shmem=shmem _Btot!(fld, B, by_min, by_max, grad_rms, Gx, Gy, Gz, dy_m,   # Valores base y alocaciones
-                grid.X, grid.Y, grid.Z, grid.nx, grid.ny, grid.nz,                                                              # Grid de evaluación
-                P, M, m,                                                                                                        # Pos y θ de vec momento dipolo
-                msk)
-    
-    @cuda threads=threads blocks=blocks _grad!(B, Gx, Gy, Gz, dy_m, grid.nx, grid.ny, grid.nz, N)
-    
-    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N)        
+    @cuda threads=threads blocks=blocks shmem=shmem_sum  _mean!(B, by_mean, N, Nmsk)
+
+    @cuda threads=threads blocks=blocks shmem=shmem_sum  _std!(B, by_mean,stdiv, N, Nmsk)
 
 end
 
