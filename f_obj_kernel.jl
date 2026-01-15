@@ -2,6 +2,7 @@ using CUDA
 using LinearAlgebra
 
 const to_rad_f32 = 1.74532925f-2 # π/180 precalculado como Float32
+const scale = 1.0f-7 # μ0 / 4π
 
 function _M!(θ, μ, m, M)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
@@ -53,7 +54,7 @@ end
         @inbounds for k in 1:m
             # Obtener dipolo desde memoria compartida
             μx, μy, μz = M[1, k], M[2, k], M[3, k]
-            px, py, pz = P[4, k], P[5, k], P[6, k]
+            px, py, pz = P[1, k], P[2, k], P[3, k]
             
             dx = Rx - px
             dy = Ry - py
@@ -66,16 +67,15 @@ end
                 inv_r3 = 1.0f0 / (r2 * r)
                 inv_r5 = inv_r3 / r2
                 dot_mr = dx*μx + dy*μy + dz*μz
-                scale = 1.0f-7 # μ0 / 4π
 
-                By += scale * (3.0f0 * dot_mr * dy * inv_r5 - μy * inv_r3)
+                By += 3.0f0 * dot_mr * dy * inv_r5 - μy * inv_r3
             end
         end
     end
         
     # Write final result to Global Memory
     if idx <= N
-        @inbounds B[idx] = By * 1000 # mT
+        @inbounds B[idx] = By * scale * 1000 # mT
     end
     return
 end
