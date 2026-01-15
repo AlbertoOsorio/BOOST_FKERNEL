@@ -28,8 +28,8 @@ title_1 = "posiciones_imanes_shimming"               # nombre de la figura
 ## Ahora defino constantes
 const B1CM_T = 0.012     # campo de cada iman a 1cm
 const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
-w_grad  = 0.5            # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
-w_range = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
+λ  = 0.5            # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
+w = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
 iteraciones = 10
 restarts_1 = 2
 
@@ -71,9 +71,9 @@ M = length(posiciones)
 lower = fill(0.0,   M)                  # grados
 upper = fill(180.0, M)
 θ0    = 150.0 .* ones(M)
-μ_base = 0.52 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
+μ_base = 0.05999 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
-M0_cpu = transpose(hcat(θ0, μ_base))
+M0_cpu = transpose(μ_base)
 P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
 
 # =======================
@@ -186,6 +186,9 @@ end
 fld = CuArray(fieldmap)
 msk = CuArray(dmask)
 
+masked_count(dmask::CuArray{TM,3}) where {TM<:AbstractFloat} = Float64(CUDA.sum(dmask))
+Nmsk   = Float32(masked_count(msk))
+
 xg_mm, yg_mm, zg_mm = build_axes_mm(dims, resmm)
 grid = make_grid_gpu_from_axes_mm(xg_mm, yg_mm, zg_mm)
 
@@ -205,20 +208,22 @@ N = Int32(length(grid.X))
 blocks = cld(N, threads) 
 shmem =  5 * BATCH_M * sizeof(Float32)
 shmem_bytes = 3 * threads * sizeof(Float32) 
+
+Θ = CuArray(θ0)
 M = CuArray(M0_cpu)
 m = Int32(size(M0_cpu, 2))
 
 function mintest()
 
-    @cuda threads=threads blocks=blocks shmem=shmem _Btot!(fld, B, by_min, by_max, grad_rms, Gx, Gy, Gz, dy_m,   # Valores base y alocaciones
-                grid.X, grid.Y, grid.Z, grid.nx, grid.ny, grid.nz,                                                              # Grid de evaluación
-                P, M, m,                                                                                                        # Pos y θ de vec momento dipolo
-                msk)
+    @cuda threads=threads blocks=blocks shmem=shmem _Btot!(fld, B,                                  # Valores base y alocaciones
+                grid.X, grid.Y, grid.Z,                                                             # Grid de evaluación
+                P, Θ, M, m, N)                                                                      # Pos y θ de vec momento dipolo
     
     @cuda threads=threads blocks=blocks _grad!(B, Gx, Gy, Gz, dy_m, grid.nx, grid.ny, grid.nz, N)
     
-    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N)        
+    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N, Nmsk)        
 
+    return #w * (by_max - by_min) + λ * sqrt.(grad_rms)
 end
 
 # ---- enlaza con tu objetivo GPU ya definido arriba ----

@@ -110,7 +110,7 @@ end
 
     # Write final result to Global Memory
     if idx <= N
-        B[idx] = By
+        B[idx] = By * 1000 # mT
     end
     return
 end

@@ -72,7 +72,7 @@ M = length(posiciones)
 lower = fill(0.0,   M)                  # grados
 upper = fill(180.0, M)
 θ0    = 150.0 .* ones(M)
-μ_base = 1.52 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
+μ_base = 0.06 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
 M0_cpu = transpose(hcat(θ0, μ_base))
 P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
