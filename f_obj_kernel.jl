@@ -1,16 +1,31 @@
 using CUDA
 using LinearAlgebra
 
+const to_rad_f32 = 1.74532925f-2 # π/180 precalculado como Float32
+
+function _M!(θ, μ, m, M)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+
+    if idx > m; return; end
+    @inbounds begin
+        θin = θ[idx] * to_rad_f32
+        μin = μ[idx]
+        M[1, idx] = cos(θin) * μin
+        M[2, idx] = sin(θin) * μin
+        M[3, idx] = 0.0
+    end
+    return
+end
+
+
 
 function _Btot!(fieldmap, B,                                                   # Valores base y alocaciones
                 X, Y, Z,                                                       # Grid de evaluación
-                P, Θ, M, m, N)                                                 # Pos y θ de vec momento dipolo
+                P, M, m, N)                                                 # Pos y θ de vec momento dipolo
 
-    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x                                   
 
-    shmem  = CuStaticSharedArray(Float32, (5, BATCH_M))                                      
-
-    _By_from_shim(X, Y, Z, P, Θ, M, B, m, shmem, N, idx)
+    _By_from_shim(X, Y, Z, P, M, B, m, N, idx)
     
     if idx <= N
         B[idx] += fieldmap[idx] # Bytot
@@ -20,7 +35,7 @@ end
 
 @inline function _By_from_shim(X, Y, Z,  # X, Y y Z Son grillas de tamaño nx x ny x nz, las que contienen valores escalares. 
                                   # En vez de entregar los vectores posicion entregamos 3 campos escalares en grilla con x y z cada uno
-                            P, Θ, M, B, m, shmem,
+                            P, M, B, m,
                             N, idx)
     
     # Inicializamos acumulador de By
@@ -28,77 +43,39 @@ end
     
     # Cargamos punto de eval
     Rx, Ry, Rz = 0.0f0, 0.0f0, 0.0f0
-    if idx <= N
+    @inbounds if idx <= N
         Rx = X[idx]
         Ry = Y[idx]
         Rz = Z[idx]
     end
 
-    jb = 1
-    while jb <= m
-        batch_size = min(BATCH_M, m - jb + 1)
-        
-        # 3. MASKED COLLABORATIVE LOAD
-        # We need to fill shmem[:, 1:batch_size]. 
-        # Total elements to load = 5 * batch_size.
-        # We use all threads in the block to load these values in parallel.
-        total_elements = 5 * batch_size
-        tid = threadIdx().x
-        while tid <= total_elements
-
-            col = (tid - 1) ÷ 5 + 1
-            row = (tid - 1) % 5 + 1
+    if idx <= N
+        @inbounds for k in 1:m
+            # Obtener dipolo desde memoria compartida
+            μx, μy, μz = M[1, k], M[2, k], M[3, k]
+            px, py, pz = P[4, k], P[5, k], P[6, k]
             
-            global_col = jb + col - 1
+            dx = Rx - px
+            dy = Ry - py
+            dz = Rz - pz
             
-            if row == 1
-                shmem[row, col] = Θ[global_col]
-            elseif row == 2
-                shmem[row, col] = M[global_col]
-            else
-                shmem[row, col] = P[row - 2, global_col]
-            end
-            tid += blockDim().x
-        end
-        
-        # Aseguramos que todos los datos finalizaron de ser cargados a shmem antes de comenzar los calculos
-        sync_threads()
+            r2 = dx*dx + dy*dy + dz*dz
+            r = sqrt(r2)
+            
+            if r > 1.0f-9 # Evitamos div por 0
+                inv_r3 = 1.0f0 / (r2 * r)
+                inv_r5 = inv_r3 / r2
+                dot_mr = dx*μx + dy*μy + dz*μz
+                scale = 1.0f-7 # μ0 / 4π
 
-        # Iteramos sobre cada dipolo del batch en el que nos encontramos
-        if idx <= N
-            for l in 1:batch_size
-                # Obtener dipolo desde memoria compartida
-                θ, μ = shmem[1, l], shmem[2, l]
-                μx = cos(θ * (π/180))*μ; μy = sin(θ * (π/180))*μ; μz = 0f0
-
-                px, py, pz = shmem[3, l], shmem[4, l], shmem[5, l]
-                
-                dx = Rx - px
-                dy = Ry - py
-                dz = Rz - pz
-                
-                r2 = dx*dx + dy*dy + dz*dz
-                r = sqrt(r2)
-                
-                if r > 1.0f-9 # Evitamos div por 0
-                    inv_r3 = 1.0f0 / (r2 * r)
-                    inv_r5 = inv_r3 / r2
-                    dot_mr = dx*μx + dy*μy + dz*μz
-                    scale = 1.0f-7 # μ0 / 4π
-
-                    By += scale * (3.0f0 * dot_mr * dy * inv_r5 - μy * inv_r3)
-                end
+                By += scale * (3.0f0 * dot_mr * dy * inv_r5 - μy * inv_r3)
             end
         end
-        
-        # Aseguramos que todos los threads terminen antes de cargar la siguiente batch
-        sync_threads()
-        jb += BATCH_M
     end
-
+        
     # Write final result to Global Memory
     if idx <= N
-        B[idx] = By * 1000 # mT
+        @inbounds B[idx] = By * 1000 # mT
     end
     return
 end
@@ -119,32 +96,33 @@ function _grad!(B, Gx, Gy, Gz, d, nx, ny, nz, N)
     i   = (tmp2 % nx) + 1
 
     if idx > N; return; end
+    @inbounds begin
+        #grad x
+        if 1 < i < nx
+            Gx[idx] = (B[_idx(i+1,j,k,nx,ny,nz)] - B[_idx(i-1,j,k,nx,ny,nz)]) / (2f0*d)
+        elseif i == 1
+            Gx[idx] = (B[_idx(2,j,k,nx,ny,nz)] - B[_idx(1,j,k,nx,ny,nz)]) / d
+        else
+            Gx[idx] = (B[_idx(nx,j,k,nx,ny,nz)] - B[_idx(nx-1,j,k,nx,ny,nz)]) / d
+        end
 
-    #grad y
-    if 1 < i < nx
-        Gx[idx] = (B[_idx(i+1,j,k,nx,ny,nz)] - B[_idx(i-1,j,k,nx,ny,nz)]) / (2f0*d)
-    elseif i == 1
-        Gx[idx] = (B[_idx(2,j,k,nx,ny,nz)] - B[_idx(1,j,k,nx,ny,nz)]) / d
-    else
-        Gx[idx] = (B[_idx(nx,j,k,nx,ny,nz)] - B[_idx(nx-1,j,k,nx,ny,nz)]) / d
-    end
+        #grad y
+        if 1 < j < ny
+            Gy[idx] = (B[_idx(i,j+1,k,nx,ny,nz)] - B[_idx(i,j-1,k,nx,ny,nz)]) / (2f0*d)
+        elseif j == 1
+            Gy[idx] = (B[_idx(i,2,k,nx,ny,nz)]   - B[_idx(i,1,k,nx,ny,nz)])   / d
+        else
+            Gy[idx] = (B[_idx(i,ny,k,nx,ny,nz)]  - B[_idx(i,ny-1,k,nx,ny,nz)]) / d
+        end
 
-    #grad y
-    if 1 < j < ny
-        Gy[idx] = (B[_idx(i,j+1,k,nx,ny,nz)] - B[_idx(i,j-1,k,nx,ny,nz)]) / (2f0*d)
-    elseif j == 1
-        Gy[idx] = (B[_idx(i,2,k,nx,ny,nz)]   - B[_idx(i,1,k,nx,ny,nz)])   / d
-    else
-        Gy[idx] = (B[_idx(i,ny,k,nx,ny,nz)]  - B[_idx(i,ny-1,k,nx,ny,nz)]) / d
-    end
-
-    #grad z
-    if 1 < k < nz
-        Gz[idx] = (B[_idx(i,j,k+1,nx,ny,nz)] - B[_idx(i,j,k-1,nx,ny,nz)]) / (2f0*d)
-    elseif k == 1
-        Gz[idx] = (B[_idx(i,j,2,nx,ny,nz)] - B[_idx(i,j,1,nx,ny,nz)]) / d
-    else
-        Gz[idx] = (B[_idx(i,j,nz,nx,ny,nz)] - B[_idx(i,j,nz-1,nx,ny,nz)]) / d
+        #grad z
+        if 1 < k < nz
+            Gz[idx] = (B[_idx(i,j,k+1,nx,ny,nz)] - B[_idx(i,j,k-1,nx,ny,nz)]) / (2f0*d)
+        elseif k == 1
+            Gz[idx] = (B[_idx(i,j,2,nx,ny,nz)] - B[_idx(i,j,1,nx,ny,nz)]) / d
+        else
+            Gz[idx] = (B[_idx(i,j,nz,nx,ny,nz)] - B[_idx(i,j,nz-1,nx,ny,nz)]) / d
+        end
     end
     sync_threads()
 
@@ -212,6 +190,14 @@ function _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, mask, N, Nmask)
         CUDA.@atomic by_min[] = min(by_min[], shared_min[1])
         CUDA.@atomic by_max[] = max(by_max[], shared_max[1])
         CUDA.@atomic grad_rms[] += shared_sum[1]
+    end
+    return
+end
+
+function f_val!(by_min, by_max, grad_rms, coef)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    if idx == 1
+        coef[idx] = w * (by_max[idx] - by_min[idx]) + λ * sqrt(grad_rms[idx])
     end
     return
 end

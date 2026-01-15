@@ -230,10 +230,6 @@ function objective_gpu_allgpu_ranged()
     # Campo total (ambos Float32)
     dBtot = dB0y .+ dBy
 
-    println(dx_m)
-    println(dy_m)
-    println(dz_m)
-
     # Gradientes (mT/m) en GPU
     dGy = similar(dBtot); _grad_y_cuda!(dGy, dBtot, dy_m)
     dGx = similar(dBtot); _grad_x_cuda!(dGx, dBtot, dx_m)
