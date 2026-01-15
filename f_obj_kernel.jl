@@ -126,7 +126,7 @@ end
         # Handles the last 1, 2, or 3 items if m is not divisible by 4
         while k <= m
             μx, μy, μz = M[1, k], M[2, k], M[3, k]
-            px, py, pz = P[4, k], P[5, k], P[6, k]
+            px, py, pz = P[1, k], P[2, k], P[3, k]
             dx, dy, dz = Rx - px, Ry - py, Rz - pz
             r2 = dx*dx + dy*dy + dz*dz
 
