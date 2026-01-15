@@ -29,7 +29,7 @@ function _Btot!(fieldmap, B,                                                   #
     _By_from_shim(X, Y, Z, P, M, B, m, N, idx)
     
     if idx <= N
-        B[idx] += fieldmap[idx] # Bytot
+        @inbounds B[idx] += fieldmap[idx] # Bytot
     end
     return 
 end
@@ -50,26 +50,95 @@ end
         Rz = Z[idx]
     end
 
-    if idx <= N
-        @inbounds for k in 1:m
-            # Obtener dipolo desde memoria compartida
-            μx, μy, μz = M[1, k], M[2, k], M[3, k]
-            px, py, pz = P[1, k], P[2, k], P[3, k]
+    @inbounds if idx <= N
+        # 1. Main Unrolled Loop
+        # We step by 4. We stop at m - 3 to avoid going out of bounds.
+        k = 1
+        while k <= m - 3
+            # --- Dipole 1 ---
+            μx1, μy1, μz1 = M[1, k],   M[2, k],   M[3, k]
+            px1, py1, pz1 = P[1, k],   P[2, k],   P[3, k]
+            dx1, dy1, dz1 = Rx - px1, Ry - py1, Rz - pz1
+            r2_1 = dx1*dx1 + dy1*dy1 + dz1*dz1
             
-            dx = Rx - px
-            dy = Ry - py
-            dz = Rz - pz
-            
-            r2 = dx*dx + dy*dy + dz*dz
-            r = sqrt(r2)
-            
-            if r > 1.0f-9 # Evitamos div por 0
-                inv_r3 = 1.0f0 / (r2 * r)
-                inv_r5 = inv_r3 / r2
-                dot_mr = dx*μx + dy*μy + dz*μz
+            # --- Dipole 2 ---
+            μx2, μy2, μz2 = M[1, k+1], M[2, k+1], M[3, k+1]
+            px2, py2, pz2 = P[1, k+1], P[2, k+1], P[3, k+1]
+            dx2, dy2, dz2 = Rx - px2, Ry - py2, Rz - pz2
+            r2_2 = dx2*dx2 + dy2*dy2 + dz2*dz2
 
+            # --- Dipole 3 ---
+            μx3, μy3, μz3 = M[1, k+2], M[2, k+2], M[3, k+2]
+            px3, py3, pz3 = P[1, k+2], P[2, k+2], P[3, k+2]
+            dx3, dy3, dz3 = Rx - px3, Ry - py3, Rz - pz3
+            r2_3 = dx3*dx3 + dy3*dy3 + dz3*dz3
+
+            # --- Dipole 4 ---
+            μx4, μy4, μz4 = M[1, k+3], M[2, k+3], M[3, k+3]
+            px4, py4, pz4 = P[1, k+3], P[2, k+3], P[3, k+3]
+            dx4, dy4, dz4 = Rx - px4, Ry - py4, Rz - pz4
+            r2_4 = dx4*dx4 + dy4*dy4 + dz4*dz4
+
+            # --- Math Block 1 ---
+            if r2_1 > 1.0f-18
+                inv_r_1 = CUDA.rsqrt(r2_1)
+                inv_r2_1 = inv_r_1 * inv_r_1
+                inv_r3_1 = inv_r2_1 * inv_r_1
+                inv_r5_1 = inv_r3_1 * inv_r2_1
+                dot_mr_1 = dx1*μx1 + dy1*μy1 + dz1*μz1
+                By += 3.0f0 * dot_mr_1 * dy1 * inv_r5_1 - μy1 * inv_r3_1
+            end
+
+            # --- Math Block 2 ---
+            if r2_2 > 1.0f-18
+                inv_r_2 = CUDA.rsqrt(r2_2)
+                inv_r2_2 = inv_r_2 * inv_r_2
+                inv_r3_2 = inv_r2_2 * inv_r_2
+                inv_r5_2 = inv_r3_2 * inv_r2_2
+                dot_mr_2 = dx2*μx2 + dy2*μy2 + dz2*μz2
+                By += 3.0f0 * dot_mr_2 * dy2 * inv_r5_2 - μy2 * inv_r3_2
+            end
+
+            # --- Math Block 3 ---
+            if r2_3 > 1.0f-18
+                inv_r_3 = CUDA.rsqrt(r2_3)
+                inv_r2_3 = inv_r_3 * inv_r_3
+                inv_r3_3 = inv_r2_3 * inv_r_3
+                inv_r5_3 = inv_r3_3 * inv_r2_3
+                dot_mr_3 = dx3*μx3 + dy3*μy3 + dz3*μz3
+                By += 3.0f0 * dot_mr_3 * dy3 * inv_r5_3 - μy3 * inv_r3_3
+            end
+
+            # --- Math Block 4 ---
+            if r2_4 > 1.0f-18
+                inv_r_4 = CUDA.rsqrt(r2_4)
+                inv_r2_4 = inv_r_4 * inv_r_4
+                inv_r3_4 = inv_r2_4 * inv_r_4
+                inv_r5_4 = inv_r3_4 * inv_r2_4
+                dot_mr_4 = dx4*μx4 + dy4*μy4 + dz4*μz4
+                By += 3.0f0 * dot_mr_4 * dy4 * inv_r5_4 - μy4 * inv_r3_4
+            end
+
+            k += 4
+        end
+
+        # 2. Remainder Loop (Cleanup)
+        # Handles the last 1, 2, or 3 items if m is not divisible by 4
+        while k <= m
+            μx, μy, μz = M[1, k], M[2, k], M[3, k]
+            px, py, pz = P[4, k], P[5, k], P[6, k]
+            dx, dy, dz = Rx - px, Ry - py, Rz - pz
+            r2 = dx*dx + dy*dy + dz*dz
+
+            if r2 > 1.0f-18
+                inv_r = CUDA.rsqrt(r2)
+                inv_r2 = inv_r * inv_r
+                inv_r3 = inv_r2 * inv_r
+                inv_r5 = inv_r3 * inv_r2
+                dot_mr = dx*μx + dy*μy + dz*μz
                 By += 3.0f0 * dot_mr * dy * inv_r5 - μy * inv_r3
             end
+            k += 1
         end
     end
         
