@@ -1,13 +1,21 @@
 ### BOOST es un script que recibe un fieldmap en mT y entrega un fieldmap en mT
-
-include("f_obj_kernel.jl")
-include("utils/grid_utils.jl")
-include("utils/ppms.jl")
-
 using DataFrames, StaticArrays, JLD2, Statistics, LinearAlgebra
 using Evolutionary, Random, CUDA
 using DelimitedFiles, MAT
 using GLMakie
+
+include("kernels/f_obj_kernel.jl")
+include("kernels/op_kernel.jl")
+include("utils/grid_utils.jl")
+include("utils/ppms.jl")
+
+## Ahora defino constantes
+const B1CM_T = 0.012     # campo de cada iman a 1cm
+const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
+const λ  = 0.5            # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
+const w = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
+iteraciones = 10
+restarts_1 = 2
 
 const BATCH_M = 64
 const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre
@@ -24,14 +32,6 @@ positions_in_tray_occupied   = Int[]                 # los que ya están
 positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
 title_1 = "posiciones_imanes_shimming"               # nombre de la figura
 
-
-## Ahora defino constantes
-const B1CM_T = 0.012     # campo de cada iman a 1cm
-const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
-const λ  = 0.5            # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
-const w = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
-iteraciones = 10
-restarts_1 = 2
 
 #Definimos el step de la grilla del fieldmap. Viene del jld2
 dx = length(xg) > 1 ? minimum(abs.(diff(xg))) : 0.0
@@ -66,12 +66,12 @@ posiciones = positions_from_rings_mm(positions_in_tray_new_wished;
     num_segments           = 12,
     angle_per_segment_deg  = 2*(180 - 169.68),
     angular_offset_deg     = 0.0)
-M = length(posiciones)
+Cantidad_pos = length(posiciones)
 
-lower = fill(0.0,   M)                  # grados
-upper = fill(180.0, M)
-θ0    = 150.0 .* ones(M)
-μ_base = 0.06 .* ones(M)                # TODO Determinar valor real de la magnitud de los imanes de shimming
+lower = fill(0.0,   Cantidad_pos)                  # grados
+upper = fill(180.0, Cantidad_pos)
+θ0    = 150.0 .* ones(Cantidad_pos)
+μ_base = 0.06 .* ones(Cantidad_pos)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
 P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
 
@@ -99,6 +99,7 @@ by_min = CuArray([typemax(Float32)])
 by_max = CuArray([typemin(Float32)])
 grad_rms = CuArray([0.0f0])
 coef = CuArray([0.0f0])
+f_prev = CuArray([0.0f0])
 
 threads = 512 
 N = Int32(length(grid.X))
@@ -107,13 +108,15 @@ blocks = cld(N, threads)
 
 shmem_bytes = 3 * threads * sizeof(Float32) 
 
-Θ = Float32.(CuArray(θ0))
-μ = Float32.(CuArray(μ_base))
+θ_init = Float32.(CuArray(θ0))
+mu = Float32.(CuArray(μ_base))
 m = Int32(size(P_cpu, 2))
+
+Θmew = similar(θ_init)
 
 function mintest()
 
-    @cuda threads=threads blocks=blocks                  _M!(Θ, μ, m, M)
+    @cuda threads=threads blocks=blocks                  _M!(θ_init, mu, m, M)
 
     @cuda threads=threads blocks=blocks                  _Btot!(fld, B,                                  # Valores base y alocaciones
                                                             grid.X, grid.Y, grid.Z,                 # Grid de evaluación
@@ -127,6 +130,22 @@ function mintest()
     return 
 end
 
+
+function operation( θop )
+
+    @cuda threads=threads blocks=blocks                  _M!(θop, mu, m, M)
+
+    @cuda threads=threads blocks=blocks                  _Btot!(fld, B,                                  # Valores base y alocaciones
+                                                            grid.X, grid.Y, grid.Z,                 # Grid de evaluación
+                                                            P, M, m, N)                          # Pos y θ de vec momento dipolo
+    
+    @cuda threads=threads blocks=blocks                   _grad!(B, Gx, Gy, Gz, dy_m, grid.nx, grid.ny, grid.nz, N)
+    
+    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N, Nmsk)        
+    @cuda threads=threads blocks=blocks                    f_val!(by_min, by_max, grad_rms, coef)
+    
+    return
+end
 # ---- enlaza con tu objetivo GPU ya definido arriba ----
 #f_eval = θ -> objective_gpu_allgpu_ranged(θ)
 

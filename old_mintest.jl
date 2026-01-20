@@ -1,14 +1,14 @@
 ### BOOST es un script que recibe un fieldmap en mT y entrega un fieldmap en mT
-
-include("f_obj_kernel.jl")
-include("utils/grid_utils.jl")
-include("utils/ppm_copy.jl")
-include("utils/imanes.jl")
-
 using DataFrames, StaticArrays, JLD2, Statistics, LinearAlgebra
 using Evolutionary, Random, CUDA
 using DelimitedFiles, MAT
 using GLMakie
+
+
+
+include("utils/grid_utils.jl")
+include("utils/ppm_copy.jl")
+include("utils/imanes.jl")
 
 const BATCH_M = 64
 const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre
@@ -214,11 +214,11 @@ masked_count(dmask::CuArray{TM,3}) where {TM<:AbstractFloat} = Float64(CUDA.sum(
 dmask32  = Float32.(dmask .> 0)                      # asegúrate de 0/1 Float32
 dmask    = CuArray(dmask32)
 
-function objective_gpu_allgpu_ranged()
+function objective_gpu_allgpu_ranged( θ )
     #θdeg = DISC_5 ? disc5(θdeg_raw) : θdeg_raw
 
     # Campo de imanes (mT) en GPU
-    dBy = campo_imanes_gpu(posiciones, θ0, dims, resmm;
+    dBy = campo_imanes_gpu(posiciones, θ, dims, resmm;
                            center_grid=true, center_mm=(0,0,0),
                            axis=:x, B1cm_T=B1CM_T, to_mT=true)
 
@@ -250,3 +250,73 @@ function objective_gpu_allgpu_ranged()
 
     return w_range * range_by + w_grad * grad_rms
 end
+
+
+
+function clamp!(v, lo, hi)
+    @inbounds for i in eachindex(v)
+        v[i] = min(max(v[i], lo[i]), hi[i])
+    end
+    return v
+end
+
+# Mutación gaussiana con radio (step_deg), discretizada a 5°
+function mutate!(θ, step_deg, lo, hi)
+    @inbounds for i in eachindex(θ)
+        if rand() < 0.3               # 30% de genes mutan
+            θ[i] += step_deg * randn()
+        end
+    end
+    clamp!(θ, lo, hi)
+    return θ
+end
+
+# Enfriamiento exponencial
+cool(t0, alpha, k) = t0 * (alpha^k)
+
+# Bucle principal de SA con reinicios
+function optimize_SA(f; θ_init=θ0, lower=lower, upper=upper,
+                     iters=2_000, restarts=5,
+                     T0=0.1, alpha=0.995, step0=10.0, step_min=0.5,
+                     report_every=50)
+
+    bestθ_global = copy(θ_init)
+    bestf_global = f(bestθ_global)
+    dBy = campo_imanes_gpu(posiciones, bestθ_global, dims, resmm; axis=:y, B1cm_T=B1CM_T, to_mT=true)
+    bestcampo_global = dB0y .+ dBy
+
+    for r in 1:restarts
+        θ = (r==1 ? copy(bestθ_global) : lower .+ rand(length(θ_init)) .* (upper .- lower))
+
+        fθ = f(θ)
+
+        step = step0
+        T = T0
+        step_decay = (step0 > step_min) ? (step_min/step0)^(1/iters) : 1.0
+
+        for k in 1:iters
+            θnew = copy(θ)
+            mutate!(θnew, step, lower, upper)
+            fnew = f(θnew)
+
+            if (fnew < fθ) || (rand() < exp(-(fnew - fθ)/max(T,1e-9)))
+                θ .= θnew
+                fθ = fnew
+                if fθ < bestf_global
+                    bestf_global = fθ
+                    bestθ_global .= θ
+                end
+            end
+
+            T = cool(T0, alpha, k)
+            step = max(step*step_decay, step_min)
+
+            if (k % report_every == 0)
+                @info "SA restart=$r iter=$k  f=$fθ  best=$bestf_global  T=$(round(T,digits=4))  step=$(round(step,digits=2))"
+            end
+        end
+    end
+
+end
+
+f_eval = θ -> objective_gpu_allgpu_ranged(θ)

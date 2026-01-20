@@ -1,6 +1,6 @@
 ### BOOST es un script que recibe un fieldmap en mT y entrega un fieldmap en mT
 
-include("std_kernel.jl")
+include("kernels/std_kernel.jl")
 include("utils/grid_utils.jl")
 include("utils/ppms.jl")
 
