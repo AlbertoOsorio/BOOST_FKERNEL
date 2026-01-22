@@ -18,6 +18,24 @@ function _M!(θ, μ, m, M)
     return
 end
 
+function _Btotmasked!(fieldmap, B,                           # Valores base y alocaciones
+                X, Y, Z,                                        # Grid de evaluación
+                P, M, m,                                                    # Pos y θ de vec momento dipolo
+                mask, N)
+
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+                                   
+
+    _By_from_shim(X, Y, Z, P, M, B, m, N, idx)
+
+    if idx <= N
+        B[idx] += fieldmap[idx] # Bytot
+        B[idx] *= mask[idx]    # Aplicamos mascara
+    end
+
+    return # Es un kernel mutable, no debemos retornar nada
+end
+
 
 
 function _Btot!(fieldmap, B,                                                   # Valores base y alocaciones
@@ -260,6 +278,86 @@ function _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, mask, N, Nmask)
         CUDA.@atomic by_max[] = max(by_max[], shared_max[1])
         CUDA.@atomic grad_rms[] += shared_sum[1]
     end
+    return
+end
+
+
+
+function _mean!(B, by_mean, N, Nmask)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    tid = threadIdx().x
+
+    shared_sum = CuDynamicSharedArray(eltype(B), blockDim().x)
+
+    # Inicializamos shmem con un valor
+    shared_sum[tid] = zero(eltype(B))
+
+    # Cargamos un punto y adicionalmente guardamos val²
+    if idx <= N
+        val = B[idx]
+        shared_sum[tid] = val / Nmask
+    end
+   
+    # Aseguramos que toda la memoria termino de ser cargada
+    sync_threads()
+
+    # Tree Reduction
+    s = blockDim().x ÷ 2
+    while s > 0
+        if tid <= s
+            shared_sum[tid] += shared_sum[tid + s]
+        end
+        sync_threads()
+        s ÷= 2
+    end
+
+    # Updates to Global Memory
+    if tid == 1
+        CUDA.@atomic by_mean[] += shared_sum[1]
+    end
+    
+    return
+end
+
+function _std!(B, by_mean,stdiv, N, Nmask)
+
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    tid = threadIdx().x
+
+    shared_sum = CuDynamicSharedArray(eltype(B), blockDim().x)
+
+    # Inicializamos shmem con un valor
+    shared_sum[tid] = zero(eltype(B))
+
+    # Cargamos un punto y adicionalmente guardamos val²
+    if idx <= N
+        val = B[idx]
+        if val == 0.0
+            shared_sum[tid] = 0.0
+        else
+            μ = by_mean[1]
+            shared_sum[tid] = ((val - μ)^2)/Nmask
+        end
+    end
+   
+    # Aseguramos que toda la memoria termino de ser cargada
+    sync_threads()
+
+    # Tree Reduction
+    s = blockDim().x ÷ 2
+    while s > 0
+        if tid <= s
+            shared_sum[tid] += shared_sum[tid + s]
+        end
+        sync_threads()
+        s ÷= 2
+    end
+
+    # Updates to Global Memory
+    if tid == 1
+        CUDA.@atomic stdiv[] += shared_sum[1]
+    end
+
     return
 end
 

@@ -6,9 +6,9 @@ using GLMakie
 
 
 
-include("utils/grid_utils.jl")
-include("utils/ppm_copy.jl")
-include("utils/imanes.jl")
+include("../utils/grid_utils.jl")
+include("../utils/ppm_copy.jl")
+include("../utils/imanes.jl")
 
 const BATCH_M = 64
 const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre

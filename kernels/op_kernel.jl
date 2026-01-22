@@ -39,7 +39,7 @@ function overwrite_cuarray!(x, xop)
 end
 
 function naive_SA!(f; lower=lower, upper=upper,
-                     iters=10, restarts=5,
+                     iters=2_000, restarts=5,
                      T0=0.1, alpha=0.995, step0=10.0, step_min=0.5,
                      report_every=50)
     
@@ -92,4 +92,5 @@ function naive_SA!(f; lower=lower, upper=upper,
             end
         end
     end
+    return bestθ_global
 end

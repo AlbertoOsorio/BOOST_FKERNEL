@@ -4,10 +4,10 @@ using Evolutionary, Random, CUDA
 using DelimitedFiles, MAT
 using GLMakie
 
-include("kernels/f_obj_kernel.jl")
-include("kernels/op_kernel.jl")
-include("utils/grid_utils.jl")
-include("utils/ppms.jl")
+include("../kernels/f_kernel.jl")
+include("../kernels/op_kernel.jl")
+include("../utils/grid_utils.jl")
+include("../utils/ppms.jl")
 
 ## Ahora defino constantes
 const B1CM_T = 0.012     # campo de cada iman a 1cm
@@ -129,33 +129,3 @@ function mintest()
     
     return 
 end
-
-
-function operation( θop )
-
-    @cuda threads=threads blocks=blocks                  _M!(θop, mu, m, M)
-
-    @cuda threads=threads blocks=blocks                  _Btot!(fld, B,                                  # Valores base y alocaciones
-                                                            grid.X, grid.Y, grid.Z,                 # Grid de evaluación
-                                                            P, M, m, N)                          # Pos y θ de vec momento dipolo
-    
-    @cuda threads=threads blocks=blocks                   _grad!(B, Gx, Gy, Gz, dy_m, grid.nx, grid.ny, grid.nz, N)
-    
-    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N, Nmsk)        
-    @cuda threads=threads blocks=blocks                    f_val!(by_min, by_max, grad_rms, coef)
-    
-    return
-end
-# ---- enlaza con tu objetivo GPU ya definido arriba ----
-#f_eval = θ -> objective_gpu_allgpu_ranged(θ)
-
-
-
-#bestf, bestθ, bestcampo_global = optimize_SA(f_eval; θ_init=θ0, iters=iteraciones, restarts=restarts_1,
-#                           T0=0.05, alpha=0.995, step0=10.0, step_min=1.0,
-#                           report_every=100)
-
-
-#println("Optimizacion terminada")
-#println("fmin = ", bestf)
-#println("rotaciones (deg) = ", (DISC_5 ? disc5(bestθ) : bestθ)[1:min(10,end)])
