@@ -361,7 +361,7 @@ function _std!(B, by_mean,stdiv, N, Nmask)
     return
 end
 
-function f_val!(by_min, by_max, grad_rms, coef)
+function f_val!(by_min, by_max, grad_rms, coef, λ)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     if idx == 1
         coef[idx] = w * (by_max[idx] - by_min[idx]) + λ * sqrt(grad_rms[idx])

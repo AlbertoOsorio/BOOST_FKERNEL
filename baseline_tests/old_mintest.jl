@@ -276,7 +276,7 @@ cool(t0, alpha, k) = t0 * (alpha^k)
 
 # Bucle principal de SA con reinicios
 function optimize_SA(f; θ_init=θ0, lower=lower, upper=upper,
-                     iters=10, restarts=5,
+                     iters=2_000, restarts=5,
                      T0=0.1, alpha=0.995, step0=10.0, step_min=0.5,
                      report_every=50)
 
@@ -316,6 +316,7 @@ function optimize_SA(f; θ_init=θ0, lower=lower, upper=upper,
             end
         end
     end
+    return bestθ_global, bestcampo_global
 
 end
 

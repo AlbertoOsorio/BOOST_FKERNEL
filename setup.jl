@@ -10,7 +10,7 @@ include("utils/ppms.jl")
 ## Ahora defino constantes
 const B1CM_T = 0.012     # campo de cada iman a 1cm
 const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
-const λ  = 0.5            # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
+#const λ  = 0.5           # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
 const w = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
 iteraciones = 10
 restarts = 2

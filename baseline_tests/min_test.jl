@@ -118,13 +118,13 @@ function mintest()
 
     @cuda threads=threads blocks=blocks                  _M!(θ_init, mu, m, M)
 
-    @cuda threads=threads blocks=blocks                  _Btot!(fld, B,                                  # Valores base y alocaciones
-                                                            grid.X, grid.Y, grid.Z,                 # Grid de evaluación
-                                                            P, M, m, N)                          # Pos y θ de vec momento dipolo
+    #@cuda threads=threads blocks=blocks                  _Btot!(fld, B,                                  # Valores base y alocaciones
+    #                                                        grid.X, grid.Y, grid.Z,                 # Grid de evaluación
+    #                                                        P, M, m, N)                          # Pos y θ de vec momento dipolo
     
-    @cuda threads=threads blocks=blocks                   _grad!(B, Gx, Gy, Gz, dy_m, grid.nx, grid.ny, grid.nz, N)
+    @cuda threads=threads blocks=blocks                   _grad!(fld, Gx, Gy, Gz, dy_m, grid.nx, grid.ny, grid.nz, N)
     
-    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N, Nmsk)        
+    @cuda threads=threads blocks=blocks shmem=shmem_bytes _metrics!(fld, by_min, by_max, grad_rms, Gx, Gy, Gz, msk, N, Nmsk)        
     @cuda threads=threads blocks=blocks                    f_val!(by_min, by_max, grad_rms, coef)
     
     return 
