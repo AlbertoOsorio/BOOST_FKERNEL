@@ -39,9 +39,9 @@ function overwrite_cuarray!(x, xop)
 end
 
 function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
-                     iters=4_000, restarts=5,
-                     T0=0.1, alpha=0.995, step0=10.0, step_min=0.5,
-                     report_every=50)
+                     iters=1_000_000, restarts=10,
+                     T0=0.1, alpha=0.95, step0=10.0, step_min=0.5,
+                     report_every=10000)
     
     lo = CuArray(lower)
     hi = CuArray(upper)
@@ -86,9 +86,11 @@ function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
             T = cool(T0, alpha, k)
             step = max(step*step_decay, step_min)
             @allowscalar begin
+                @cuda threads=threads blocks=blocks shmem=shmem_sum   _mean!(B, by_mean, N, Nmsk)
                 if (k % report_every == 0)
-                    @info "SA restart=$r iter=$k  f=$coef best=$bestf_global  T=$(round(T,digits=4))  step=$(round(step,digits=2))"
+                    @info "SA restart=$r iter=$k  f=$coef best=$bestf_global mean=$by_mean  T=$(round(T,digits=4))  step=$(round(step,digits=2))"
                 end
+                @cuda threads=512 blocks=cld(336, 512) overwrite_cuarray!(CuArray([0.0f0]), by_mean)
             end
         end
     end

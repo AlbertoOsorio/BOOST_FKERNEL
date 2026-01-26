@@ -12,13 +12,23 @@ const B1CM_T = 0.012     # campo de cada iman a 1cm
 const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
 #const λ  = 0.5           # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
 const w = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
-iteraciones = 10
-restarts = 2
+
 mode = "RMS"            # RMS o STDIV
 const BATCH_M = 64
+
+
 const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre
 @load FILE By_grid xg yg zg modelBy x y z By   # Todo en mT y mm
 fieldmap = By_grid
+
+#const FILE = "data/fieldmaps/f_baja.jld2"
+#@load FILE fld_3d_baja
+#fieldmap = fld_3d_baja
+
+
+#const FILE = "data/fieldmaps/f_alta.jld2"
+#@load FILE fld_3d_alta
+#fieldmap = fld_3d_alta
 
 ## Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm
