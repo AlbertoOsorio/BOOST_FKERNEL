@@ -41,7 +41,7 @@ end
 function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
                      iters=1_000_000, restarts=10,
                      T0=0.1, alpha=0.95, step0=10.0, step_min=0.5,
-                     report_every=10000)
+                     report_every=50)
     
     lo = CuArray(lower)
     hi = CuArray(upper)

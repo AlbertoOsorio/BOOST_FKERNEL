@@ -77,7 +77,7 @@ posiciones = positions_from_rings_mm(positions_in_tray_new_wished;
 Cantidad_pos = length(posiciones)
 
 lower = fill(0.0,   Cantidad_pos)                  # grados
-upper = fill(180.0, Cantidad_pos)
+upper = fill(360.0, Cantidad_pos)
 θ0    = 150.0 .* ones(Cantidad_pos)
 μ_base = 0.06 .* ones(Cantidad_pos)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
