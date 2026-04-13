@@ -1,9 +1,9 @@
 include("../kernels/f_kernel.jl")
 include("../kernels/op_kernel.jl")
 
-function RMS_operation( θop, λ)
+function RMS_operation( θop, λ, current_state )
 
-    @cuda threads=threads blocks=blocks                   _M!(θop, mu, m, M)
+    @cuda threads=threads blocks=blocks                   _M!(θop, mu, current_state, m, M)
 
     @cuda threads=threads blocks=blocks                   _Btot!(fld, B,                                
                                                             grid.X, grid.Y, grid.Z,              
@@ -18,9 +18,9 @@ function RMS_operation( θop, λ)
 end
 
 
-function STDIV_operation( θop )
+function STDIV_operation( θop, current_state )
 
-    @cuda threads=threads blocks=blocks                   _M!(θop, mu, m, M)
+    @cuda threads=threads blocks=blocks                   _M!(θop, mu, current_state, m, M)
 
     @cuda threads=threads blocks=blocks                   _Btotmasked!(fld, B,                                             
                                                                 grid.X, grid.Y, grid.Z,     

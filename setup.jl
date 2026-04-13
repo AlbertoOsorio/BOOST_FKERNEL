@@ -7,7 +7,7 @@ using GLMakie
 include("utils/grid_utils.jl")
 include("utils/ppms.jl")
 
-## Ahora defino constantes
+# Ahora defino constantes
 const B1CM_T = 0.012     # campo de cada iman a 1cm
 const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
 #const λ  = 0.5           # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
@@ -30,14 +30,15 @@ fieldmap = By_grid
 #@load FILE fld_3d_alta
 #fieldmap = fld_3d_alta
 
-## Definir el tamaño del cascaron en el que mediremos los errores
+# Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm
 Rmax = 100.0  # mm
 
 
-## Definir los anillos en las bandejas en los que pondremos imanes para hacer shimming mas los que están usados
+# Definir los anillos en las bandejas en los que pondremos imanes para hacer shimming mas los que están usados
 positions_in_tray_occupied   = Int[]                 # los que ya están
-positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
+#positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
+positions_in_tray_new_wished = vcat(-21:-1, 1:21)       # 42 anillos
 title_1 = "posiciones_imanes_shimming"               # nombre de la figura
 
 
@@ -74,12 +75,12 @@ posiciones = positions_from_rings_mm(positions_in_tray_new_wished;
     num_segments           = 12,
     angle_per_segment_deg  = 2*(180 - 169.68),
     angular_offset_deg     = 0.0)
-Cantidad_pos = length(posiciones)
+Nmagshim = length(posiciones)
 
-lower = fill(0.0,   Cantidad_pos)                  # grados
-upper = fill(360.0, Cantidad_pos)
-θ0    = 150.0 .* ones(Cantidad_pos)
-μ_base = 0.06 .* ones(Cantidad_pos)                # TODO Determinar valor real de la magnitud de los imanes de shimming
+lower = fill(0.0,   Nmagshim)                  # grados
+upper = fill(360.0, Nmagshim)
+θ0    = 150.0 .* ones(Nmagshim)
+μ_base = 0.06 .* ones(Nmagshim)                # TODO Determinar valor real de la magnitud de los imanes de shimming
 
 P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
 
@@ -129,3 +130,5 @@ shmem_sum = threads * sizeof(Float32)
 
 mu = Float32.(CuArray(μ_base))
 m = Int32(size(P_cpu, 2))
+on_off = CuArray(ones(Nmagshim))
+state_new = similar(on_off)

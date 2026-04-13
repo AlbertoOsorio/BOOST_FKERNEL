@@ -50,7 +50,7 @@ function positions_from_rings_mm(wished_trays::AbstractVector{<:Integer};
                                  angular_offset_deg::Real = 0.0)
 
     # 1) trays válidos y posiciones axiales (mm)
-    free_trays = filter_free_trays(wished_trays, occupied_trays)
+    free_trays = wished_trays #filter_free_trays(wished_trays, occupied_trays)
     ring_z_mm  = ringpos_from_tray_mm(free_trays)  # mm
 
     # 2) ángulos por segmento y por imán (grados)
@@ -71,17 +71,15 @@ function positions_from_rings_mm(wished_trays::AbstractVector{<:Integer};
             for mag_deg in mag_angles_deg
                 θ = deg2rad(θ_seg + mag_deg)
                 x_mm = shim_radius_mm * cos(θ)
-                y_mm = z_mm                         # axial (a lo largo del bore)
-                z_mm_circ = shim_radius_mm * sin(θ)
+                y_mm = shim_radius_mm * sin(θ)                        
 
-                # Transformación: X → -X ; Z → Y ; Y → Z
-                # original (x, y, z)  ->  (-x, z, y)
-                pos_trans = [-x_mm, z_mm_circ, y_mm]
+                pos_trans = [-x_mm, y_mm, z_mm]
                 push!(pos, pos_trans)
             end
         end
     end
 
     @info "Generadas $(length(ring_z_mm)) rings, $(length(pos)) posiciones."
+    println(pos)
     return pos
 end

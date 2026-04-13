@@ -4,15 +4,16 @@ using LinearAlgebra
 const to_rad_f32 = 1.74532925f-2 # π/180 precalculado como Float32
 const scale = 1.0f-7 # μ0 / 4π
 
-function _M!(θ, μ, m, M)
+function _M!(θ, μ, current, m, M)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
 
     if idx > m; return; end
     @inbounds begin
         θin = θ[idx] * to_rad_f32
         μin = μ[idx]
-        M[1, idx] = cos(θin) * μin
-        M[2, idx] = sin(θin) * μin
+        state = current[idx]
+        M[1, idx] = cos(θin) * μin * state
+        M[2, idx] = sin(θin) * μin * state
         M[3, idx] = 0.0
     end
     return
