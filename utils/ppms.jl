@@ -80,6 +80,5 @@ function positions_from_rings_mm(wished_trays::AbstractVector{<:Integer};
     end
 
     @info "Generadas $(length(ring_z_mm)) rings, $(length(pos)) posiciones."
-    println(pos)
     return pos
 end

@@ -17,9 +17,9 @@ mode = "RMS"            # RMS o STDIV
 const BATCH_M = 64
 
 
-const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre
-@load FILE By_grid xg yg zg modelBy x y z By   # Todo en mT y mm
-fieldmap = By_grid
+#const FILE = "data/By_SH.jld2"                      # Ajusta si cambiaste el nombre
+#@load FILE By_grid xg yg zg modelBy x y z By   # Todo en mT y mm
+#fieldmap = By_grid
 
 #const FILE = "data/fieldmaps/f_baja.jld2"
 #@load FILE fld_3d_baja
@@ -30,15 +30,20 @@ fieldmap = By_grid
 #@load FILE fld_3d_alta
 #fieldmap = fld_3d_alta
 
+const FILE = "data/parallelepiped_150x150x150.jld2"
+@load FILE  By_3D xg yg zg
+fieldmap = By_3D
+
 # Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm
-Rmax = 100.0  # mm
+Rmax = 100.0 # mm
 
 
 # Definir los anillos en las bandejas en los que pondremos imanes para hacer shimming mas los que están usados
 positions_in_tray_occupied   = Int[]                 # los que ya están
-#positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
-positions_in_tray_new_wished = vcat(-21:-1, 1:21)       # 42 anillos
+positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
+#positions_in_tray_new_wished = [-6, -4, -2, 2, 4, 6] 
+#positions_in_tray_new_wished = vcat(-21:-1, 1:21)       # 42 anillos
 title_1 = "posiciones_imanes_shimming"               # nombre de la figura
 
 
@@ -48,7 +53,8 @@ dy = length(yg) > 1 ? minimum(abs.(diff(yg))) : 0.0
 dz = length(zg) > 1 ? minimum(abs.(diff(zg))) : 0.0
 resmm = (dx, dy, dz)  
 
-cx, cy, cz = modelBy.center
+#cx, cy, cz = modelBy.center
+cx, cy, cz = 0.0, 0.0, 0.0
 
 # radios en cada voxel (CPU)
 Rx = reshape(xg .- cx, :, 1, 1)
@@ -131,4 +137,4 @@ shmem_sum = threads * sizeof(Float32)
 mu = Float32.(CuArray(μ_base))
 m = Int32(size(P_cpu, 2))
 on_off = CuArray(ones(Nmagshim))
-state_new = similar(on_off)
+state_new = copy(on_off)

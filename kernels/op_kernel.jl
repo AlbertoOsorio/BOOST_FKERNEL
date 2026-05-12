@@ -10,9 +10,9 @@ function _mutate!(θ, on_off, step_deg, lo, hi, Nmags, tresh)
     @inbounds if r_val < tresh
         θ[idx] += step_deg * randn()
         θ[idx] = min(max(θ[idx], lo[idx]), hi[idx])
-        if r_val < (tresh - 0.1)
-            on_off[idx] == 0 ? on_off[idx] = 1.0 : on_off[idx] = 0.0
-        end
+        #if r_val < (tresh - 0.1)
+        #    on_off[idx] == 0 ? on_off[idx] = 1.0 : on_off[idx] = 0.0
+        #end
     end
     return
 
@@ -43,14 +43,14 @@ function overwrite_cuarray!(x, xop)
 end
 
 function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
-                     iters=6000, restarts=5,
-                     T0=0.1, alpha=0.85, step0=10.0, step_min=0.5,
-                     report_every=50)
+                     iters=100_000, restarts=10,
+                     T0=100.0, alpha=0.85, step0=10.0, step_min=0.5,
+                     report_every=1000)
     
     lo = CuArray(lower)
     hi = CuArray(upper)
 
-    f(θ_init, λ)
+    f(θ_init, λ, on_off)
     bestθ_global = copy(θ_init)
     bestf_global = CuArray([0.0f0])
     best_state_global = copy(on_off)
@@ -74,32 +74,30 @@ function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
         for k in 1:iters
     
             @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θ, Θmew)          # copia el valor de θ en Θmew
-            @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, state_new)          
+            #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, state_new)          
             @cuda threads=512 blocks=cld(Nmagshim, 512) _mutate!(Θmew, state_new, step, lo, hi, Nmagshim, 0.3)
             
             @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, f_prev)
 
-            f(Θmew, λ, state_new)
+            f(Θmew, λ, on_off)
 
             @allowscalar if (coef[1] < f_prev[1]) || (rand() < exp(-(coef[1] - f_prev[1])/max(T,1e-9)))
                 @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θmew, Θ)
-                @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(state_new, on_off) 
+                #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(state_new, on_off) 
                 @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, f_prev)
                 if coef[1] < bestf_global[1]
                     @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, bestf_global)
                     @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θ, bestθ_global)
-                    @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, best_state_global)  
+                    #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, best_state_global)  
                 end
             end
 
             T = cool(T0, alpha, k)
             step = max(step*step_decay, step_min)
             @allowscalar begin
-                @cuda threads=threads blocks=blocks shmem=shmem_sum   _mean!(B, by_mean, N, Nmsk)
                 if (k % report_every == 0)
-                    @info "SA restart=$r iter=$k  f=$coef best=$bestf_global mean=$by_mean  T=$(round(T,digits=4))  step=$(round(step,digits=2))"
+                    @info "SA restart=$r iter=$k  f=$coef best=$bestf_global  T=$(round(T,digits=4))  step=$(round(step,digits=2))"
                 end
-                @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(CuArray([0.0f0]), by_mean)
             end
         end
     end

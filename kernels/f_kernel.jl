@@ -244,7 +244,11 @@ function _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, mask, N, Nmask)
         Gx[idx] *= mask[idx]
         Gy[idx] *= mask[idx]
         Gz[idx] *= mask[idx]
-        sync_threads()
+    
+    end
+    sync_threads()
+    
+    if idx <= N
 
         val = B[idx]
         

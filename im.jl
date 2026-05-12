@@ -5,7 +5,7 @@ include("setup.jl")
 
 B_res = Array(B)
 
-slice = B_res[:,:,60]
+slice = B_res[:,:,5]
 
 fig = Figure(resolution = (800, 600))
 
@@ -15,7 +15,7 @@ ax = Axis(fig[1, 1];
     ylabel = "y mm"
 )
 
-hm = heatmap!(ax, xg, yg, slice; colormap = :viridis,colorrange = (45, 45.3))
+hm = heatmap!(ax, xg, yg, slice; colormap = :viridis,colorrange = (46.21437, 47.50534))
 Colorbar(fig[1, 2], hm, label = "mT")  # o mT, ppm, lo que corresponda
 fig
 
