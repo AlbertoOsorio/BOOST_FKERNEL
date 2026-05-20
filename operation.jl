@@ -14,6 +14,14 @@ function generate_Lcurve(T, alph)
     end
 end
 
+function optim_170()
+    λ = 0
+    bestθ, final_state =  naive_SA_RMS!(RMS_operation, λ, T0=100, alpha=0.999)
+    ppm = get_ppm_RMS(bestθ, λ, final_state)
+    mkpath(string("runs/L_curve_170/"))
+    @save "runs/L_curve_170/best_res_170.jld2" λ bestθ final_state ppm
+end
+
 
 # a = [0.85, 0.87, 0.89, 0.9, 0.92, 0.95, 0.96, 0.97, 0.99, 0.999]
 

@@ -1,11 +1,4 @@
 using Statistics
-function calcular_ppm(campo)
-    max=maximum(campo[:])
-    min=minimum(campo[:])
-    p = mean(campo[:])
-    ppm=1000000*(max-min)/p
-    return ppm
-end
 
 ############ Rings/Trays helpers (mm coherentes con tu pipeline) ############
 

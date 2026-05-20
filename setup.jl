@@ -5,7 +5,7 @@ using DelimitedFiles, MAT
 using GLMakie
 
 include("utils/grid_utils.jl")
-include("utils/ppms.jl")
+include("utils/pos_trays.jl")
 
 # Ahora defino constantes
 const B1CM_T = 0.012     # campo de cada iman a 1cm
@@ -30,9 +30,9 @@ const BATCH_M = 64
 #@load FILE fld_3d_alta
 #fieldmap = fld_3d_alta
 
-const FILE = "data/parallelepiped_150x150x150.jld2"
-@load FILE  By_3D xg yg zg
-fieldmap = By_3D
+const FILE = "data/170/Filtered_Parallelepiped_170x170x170_5_R2.jld2"
+@load FILE  Bx xg yg zg
+fieldmap = Bx ./ 10
 
 # Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm
@@ -41,9 +41,9 @@ Rmax = 100.0 # mm
 
 # Definir los anillos en las bandejas en los que pondremos imanes para hacer shimming mas los que están usados
 positions_in_tray_occupied   = Int[]                 # los que ya están
-positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
+#positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
 #positions_in_tray_new_wished = [-6, -4, -2, 2, 4, 6] 
-#positions_in_tray_new_wished = vcat(-21:-1, 1:21)       # 42 anillos
+positions_in_tray_new_wished = vcat(-6:-1, 1:6)       # 42 anillos
 title_1 = "posiciones_imanes_shimming"               # nombre de la figura
 
 
@@ -76,7 +76,7 @@ dims = size(fieldmap)
 
 posiciones = positions_from_rings_mm(positions_in_tray_new_wished;
     occupied_trays         = positions_in_tray_occupied,
-    shim_radius_mm         = 235.0,
+    shim_radius_mm         = 275.0,
     mags_per_segment       = 7,
     num_segments           = 12,
     angle_per_segment_deg  = 2*(180 - 169.68),
