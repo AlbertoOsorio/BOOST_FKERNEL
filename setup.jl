@@ -30,9 +30,9 @@ const BATCH_M = 64
 #@load FILE fld_3d_alta
 #fieldmap = fld_3d_alta
 
-const FILE = "data/170/Filtered_Parallelepiped_170x170x170_5_R2.jld2"
-@load FILE  Bx xg yg zg
-fieldmap = Bx ./ 10
+const FILE = "data/one_radius/By_SH_oneradius_JOSH.jld2" 
+@load FILE By_grid xg yg zg 
+fieldmap = By_grid
 
 # Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm

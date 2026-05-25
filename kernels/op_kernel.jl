@@ -43,7 +43,7 @@ function overwrite_cuarray!(x, xop)
 end
 
 function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
-                     iters=50_000, restarts=10,
+                     iters=10_000, restarts=10,
                      T0=100.0, alpha=0.85, step0=10.0, step_min=0.5,
                      report_every=1000)
     
