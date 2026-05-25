@@ -106,5 +106,5 @@ function regen_from_file(file)
         save(string("runs/L_curve_170/imgs/$(round(Int, λ * 100))/","$(i)_slice_at_$(round(Int, λ * 100)).png"), fig)
     end
 
-    return 1000000 * (by_max - by_min) / by_mean
+    return B_res
 end
