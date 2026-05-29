@@ -43,10 +43,10 @@ function get_ppm_RMS(bestθ, λ, final_state)
         
         Colorbar(fig[1, 2], hm, label = "mT")
 
-        dir = string("runs/SH_JOSH_oneradius/imgs/$(round(Int, λ * 100))/")
+        dir = string("runs/SH_r85/imgs/")
         mkpath(dir) 
 
-        save(string("runs/SH_JOSH_oneradius/imgs/","$(i)_slice_at_$(round(Int, λ * 100)).png"), fig)
+        save(string("runs/SH_r85/imgs/","$(i)_slice_at_$(round(Int, λ * 100)).png"), fig)
     end
 
     return 1000000 * (by_max - by_min) / by_mean

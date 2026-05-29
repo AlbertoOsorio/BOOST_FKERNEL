@@ -30,7 +30,7 @@ const BATCH_M = 64
 #@load FILE fld_3d_alta
 #fieldmap = fld_3d_alta
 
-const FILE = "data/one_radius/By_SH_oneradius_JOSH.jld2" 
+const FILE = "data/JOSH/SH_r85/By_SH.jld2" 
 @load FILE By_grid xg yg zg 
 fieldmap = By_grid
 

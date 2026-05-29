@@ -17,9 +17,9 @@ mode = "RMS"            # RMS o STDIV
 const BATCH_M = 64
 
 
-const FILE = "data/one_radius/By_SH_oneradius_JOSH.jld2" 
-@load FILE By_grid xg yg zg 
-fieldmap = By_grid
+const FILE = "data/170_josh/Filtered_Parallelepiped_170x170x170_5_R2.jld2" 
+@load FILE Bx xg yg zg 
+fieldmap = Bx
 
 # Definir el tamaño del cascaron en el que mediremos los errores
 Rmin = 0.00   # mm
@@ -77,14 +77,17 @@ P_cpu = hcat(posiciones...)             # Convierte a matrix 3x336
 
 function save_to_csv(Psave, file, name)
     @load file λ bestθ final_state ppm
+
+    best_arr = Array(bestθ)
+
     A = Psave'
     z = A[:, 3]
     ids = cumsum([0; z[2:end] .!= z[1:end-1]])
     A[:, 3] = ids
 
-    data = hcat(A, bestθ)
+    data = hcat(A, best_arr)
     df = DataFrame(data, [:x, :y, :z, :val])
 
-    CSV.write("data/insert_formatted/$name.csv", df, header= ["X (mm)", "Y(mm)", "RingNumber", "Angle (deg)"])
+    CSV.write("data/insert_formatted/$name.csv", df, header= ["X (mm)", "Y (mm)", "RingNumber", "Angle (deg)"])
 
 end
