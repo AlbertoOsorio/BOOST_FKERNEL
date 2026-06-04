@@ -68,7 +68,7 @@ function regen_from_file(file)
 
     B_res = Array(B)
 
-    for i = 1:35
+    for i = 1:128
        slice = B_res[:,:,i]
         mask_slice = dmask[:,:,i]
 
@@ -100,10 +100,10 @@ function regen_from_file(file)
         
         Colorbar(fig[1, 2], hm, label = "mT")
 
-        dir = string("runs/L_curve_170/imgs/$(round(Int, λ * 100))/")
+        dir = string("runs/runs_lab/r85_lab_imgs/")
         mkpath(dir) 
 
-        save(string("runs/L_curve_170/imgs/$(round(Int, λ * 100))/","$(i)_slice_at_$(round(Int, λ * 100)).png"), fig)
+        save(string("runs/runs_lab/r85_lab_imgs/","$(i)_slice.png"), fig)
     end
 
     return B_res
