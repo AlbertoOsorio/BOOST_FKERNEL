@@ -30,12 +30,12 @@ const BATCH_M = 64
 #@load FILE fld_3d_alta
 #fieldmap = fld_3d_alta
 
-const FILE = "data/JOSH/SH_r85/By_SH.jld2" 
+const FILE = "data/JOSH/SH_100/By_SH_r100.jld2" 
 @load FILE By_grid xg yg zg 
 fieldmap = By_grid
 
 # Definir el tamaño del cascaron en el que mediremos los errores
-Rmin = 0.00   # mm
+Rmin = 0.0   # mm
 Rmax = 100.0 # mm
 
 
@@ -136,5 +136,5 @@ shmem_sum = threads * sizeof(Float32)
 
 mu = Float32.(CuArray(μ_base))
 m = Int32(size(P_cpu, 2))
-on_off = CuArray(ones(Nmagshim))
+on_off = CuArray(zeros(Nmagshim))
 state_new = copy(on_off)

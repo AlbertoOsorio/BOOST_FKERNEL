@@ -7,7 +7,7 @@ function generate_Lcurve(T, alph)
     for baseline = 1:100
         include("setup.jl")
         λ = baseline / 100
-        bestθ, final_state =  naive_SA_RMS!(RMS_operation, λ, T0=T, alpha=alph)
+        bestθ, final_state =  naive_SA_RMS!(RMS_operation, λ, vcat(-6:-1, 1:6), T0=T, alpha=alph)
         ppm = get_ppm_RMS(bestθ, λ, final_state)
         mkpath(string("runs/L_curve_150_params_T100$(round(Int, alph * 1000))/"))
         @save "runs/L_curve_150_params_T100$(round(Int, alph * 1000))/lambdaeq_$(round(Int, λ * 100)).jld2" λ bestθ final_state ppm
@@ -15,11 +15,12 @@ function generate_Lcurve(T, alph)
 end
 
 function optim_run()
-    λ = 0.5
-    bestθ, final_state =  naive_SA_RMS!(RMS_operation, λ, T0=100, alpha=0.999)
+    λ = 0.0
+    test_ring_seq = [1,2,3,4,5,6,7,8,9,10,11,12]
+    bestθ, final_state =  naive_SA_RMS!(RMS_operation, λ, test_ring_seq, T0=100, alpha=0.999)
     ppm = get_ppm_RMS(bestθ, λ, final_state)
-    mkpath(string("runs/SH_r85/"))
-    @save "runs/SH_r85/best_from_SHr85.jld2" λ bestθ final_state ppm
+    mkpath(string("runs/test_singlering/"))
+    @save "runs/test_singlering/best_from_SR.jld2" λ bestθ final_state ppm
 end
 
 

@@ -11,7 +11,7 @@ function get_ppm_RMS(bestθ, λ, final_state)
 
     B_res = Array(B)
 
-    for i = 1:128
+    for i = 1:201
        slice = B_res[:,:,i]
         mask_slice = dmask[:,:,i]
 
@@ -43,10 +43,10 @@ function get_ppm_RMS(bestθ, λ, final_state)
         
         Colorbar(fig[1, 2], hm, label = "mT")
 
-        dir = string("runs/SH_r85/imgs/")
+        dir = string("runs/test_singlering/imgs/")
         mkpath(dir) 
 
-        save(string("runs/SH_r85/imgs/","$(i)_slice_at_$(round(Int, λ * 100)).png"), fig)
+        save(string("runs/test_singlering/imgs/","$(i)_slice.png"), fig)
     end
 
     return 1000000 * (by_max - by_min) / by_mean
@@ -68,7 +68,7 @@ function regen_from_file(file)
 
     B_res = Array(B)
 
-    for i = 1:128
+    for i = 1:201
        slice = B_res[:,:,i]
         mask_slice = dmask[:,:,i]
 
@@ -100,10 +100,10 @@ function regen_from_file(file)
         
         Colorbar(fig[1, 2], hm, label = "mT")
 
-        dir = string("runs/runs_lab/r85_lab_imgs/")
+        dir = string("runs/runs_lab/r100_lab_imgs/")
         mkpath(dir) 
 
-        save(string("runs/runs_lab/r85_lab_imgs/","$(i)_slice.png"), fig)
+        save(string("runs/runs_lab/r100_lab_imgs/","$(i)_slice.png"), fig)
     end
 
     return B_res

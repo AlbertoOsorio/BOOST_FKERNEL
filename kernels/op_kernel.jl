@@ -1,27 +1,39 @@
 
 using GPUArrays: @allowscalar
 
-function _mutate!(θ, on_off, step_deg, lo, hi, Nmags, tresh)
+function _next_ring_activation!(on_off, ring_id, Nmags)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     
     if idx > Nmags; return; end
+
+    @inbounds if ((ring_id - 1)*84 + 1 <= idx  &&  idx <= ring_id * 84)
+        on_off[idx] = 1.0
+    end
+    return
+end
+
+function _mutate!(θ, ring_id, step_deg, lo, hi, Nmags, tresh)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    
+    if idx > Nmags; return; end
+    if !((ring_id - 1)*84 + 1 <= idx  &&  idx <= ring_id * 84) ; return; end
+
     r_val = rand()
 
     @inbounds if r_val < tresh
         θ[idx] += step_deg * randn()
         θ[idx] = min(max(θ[idx], lo[idx]), hi[idx])
-        #if r_val < (tresh - 0.1)
-        #    on_off[idx] == 0 ? on_off[idx] = 1.0 : on_off[idx] = 0.0
-        #end
+
     end
     return
 
 end
 
-function _reset!(θ, lo, hi, Nmags)
+function _reset!(θ, on_off, ring_id, lo, hi, Nmags)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     
     if idx > Nmags; return; end
+    if !((ring_id - 1)*84 + 1 <= idx  &&  idx <= ring_id * 84) ; return; end
 
     @inbounds θ[idx] = lo[idx] + rand() * (hi[idx] - lo[idx])
     return
@@ -42,10 +54,10 @@ function overwrite_cuarray!(x, xop)
     return
 end
 
-function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
-                     iters=10_000, restarts=10,
-                     T0=100.0, alpha=0.85, step0=10.0, step_min=0.5,
-                     report_every=1000)
+function naive_SA_RMS!(f, λ, ring_sequence; lower=lower, upper=upper,
+                     iters=10, restarts=10,
+                     T0=10.0, alpha=0.85, step0=10.0, step_min=0.5,
+                     report_every=10)
     
     lo = CuArray(lower)
     hi = CuArray(upper)
@@ -53,54 +65,59 @@ function naive_SA_RMS!(f, λ; lower=lower, upper=upper,
     f(θ_init, λ, on_off)
     bestθ_global = copy(θ_init)
     bestf_global = CuArray([0.0f0])
-    best_state_global = copy(on_off)
+    #best_state_global = copy(on_off)
 
     @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, bestf_global)
 
     Θ = copy(bestθ_global)
 
-    for r in 1:restarts
-        if r == 1
-        else
-            @cuda threads=512 blocks=cld(Nmagshim, 512) _reset!(Θ, lo, hi, Nmagshim)
-        end
-
-        f(Θ, λ, on_off)
-
-        step = step0
-        T = T0
-        step_decay = (step0 > step_min) ? (step_min/step0)^(1/iters) : 1.0
-
-        for k in 1:iters
-    
-            @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θ, Θmew)          # copia el valor de θ en Θmew
-            #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, state_new)          
-            @cuda threads=512 blocks=cld(Nmagshim, 512) _mutate!(Θmew, state_new, step, lo, hi, Nmagshim, 0.3)
-            
-            @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, f_prev)
-
-            f(Θmew, λ, on_off)
-
-            @allowscalar if (coef[1] < f_prev[1]) || (rand() < exp(-(coef[1] - f_prev[1])/max(T,1e-9)))
-                @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θmew, Θ)
-                #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(state_new, on_off) 
-                @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, f_prev)
-                if coef[1] < bestf_global[1]
-                    @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, bestf_global)
-                    @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θ, bestθ_global)
-                    #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, best_state_global)  
-                end
+    for ring_id in ring_sequence
+        @cuda threads=512 blocks=cld(Nmagshim, 512) _next_ring_activation!(on_off, ring_id, Nmagshim)
+        @info "Starting SA for ring=$ring_id"
+        for r in 1:restarts
+            if r == 1
+            else
+                @cuda threads=512 blocks=cld(Nmagshim, 512) _reset!(Θ, on_off, ring_id, lo, hi, Nmagshim)
             end
 
-            T = cool(T0, alpha, k)
-            step = max(step*step_decay, step_min)
-            @allowscalar begin
-                if (k % report_every == 0)
-                    @info "SA restart=$r iter=$k  f=$coef best=$bestf_global  T=$(round(T,digits=4))  step=$(round(step,digits=2))"
+            f(Θ, λ, on_off)
+
+            step = step0
+            T = T0
+            step_decay = (step0 > step_min) ? (step_min/step0)^(1/iters) : 1.0
+
+            for k in 1:iters
+        
+                @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θ, Θmew)          # copia el valor de θ en Θmew
+                #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, state_new)          
+                @cuda threads=512 blocks=cld(Nmagshim, 512) _mutate!(Θmew, ring_id, step, lo, hi, Nmagshim, 0.3)
+                
+                @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, f_prev)
+
+                f(Θmew, λ, on_off)
+
+                @allowscalar if (coef[1] < f_prev[1]) || (rand() < exp(-(coef[1] - f_prev[1])/max(T,1e-9)))
+                    @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θmew, Θ)
+                    #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(state_new, on_off) 
+                    @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, f_prev)
+                    if coef[1] < bestf_global[1]
+                        @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(coef, bestf_global)
+                        @cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(Θ, bestθ_global)
+                        #@cuda threads=512 blocks=cld(Nmagshim, 512) overwrite_cuarray!(on_off, best_state_global)  
+                    end
+                end
+
+                T = cool(T0, alpha, k)
+                step = max(step*step_decay, step_min)
+                @allowscalar begin
+                    if (k % report_every == 0)
+                        @info "SA restart=$r iter=$k  f=$coef best=$bestf_global  T=$(round(T,digits=4))  step=$(round(step,digits=2))  Active_mags=$(sum(on_off))"
+                    end
                 end
             end
         end
     end
+    best_state_global = copy(on_off)
     return bestθ_global, best_state_global
 end
 
