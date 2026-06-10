@@ -219,15 +219,14 @@ end
 
 
 function _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, mask, N, Nmask)
-
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     tid = threadIdx().x
 
-    shared_min = CuDynamicSharedArray(eltype(B), blockDim().x)                                        # Para calcular min en Btot masked
-    shared_max = CuDynamicSharedArray(eltype(B), blockDim().x, blockDim().x * sizeof(eltype(B)))      # Para calcular max en Btot masked
-    shared_sum = CuDynamicSharedArray(eltype(B), blockDim().x, 2 * blockDim().x * sizeof(eltype(B)))  # Para calcular RMS dBytot
+    shared_min = CuDynamicSharedArray(eltype(B), blockDim().x)                                        
+    shared_max = CuDynamicSharedArray(eltype(B), blockDim().x, blockDim().x * sizeof(eltype(B)))      
+    shared_sum = CuDynamicSharedArray(eltype(B), blockDim().x, 2 * blockDim().x * sizeof(eltype(B)))  
 
-    # Inicializamos shmem con un valor
+    # 1. Standard Initialization
     shared_min[tid] = typemax(eltype(B))
     shared_max[tid] = typemin(eltype(B))
     shared_sum[tid] = zero(eltype(B))
@@ -238,38 +237,32 @@ function _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, mask, N, Nmask)
         grad_rms[idx] = 0.0f0
     end
 
-    # Cargamos un punto y adicionalmente guardamos val²
+    # Apply mask mathematically to the global arrays
     if idx <= N
         B[idx]  *= mask[idx]
         Gx[idx] *= mask[idx]
         Gy[idx] *= mask[idx]
         Gz[idx] *= mask[idx]
-    
     end
     sync_threads()
     
+    # 2. Smart Loading into Shared Memory
     if idx <= N
-
         val = B[idx]
+        is_valid = mask[idx] > 0.0f0 # Check if point is inside the mask
         
-        shared_min[tid] = val
-        shared_max[tid] = val
-        shared_sum[tid] = (Gx[idx]^2 + Gy[idx]^2 + Gz[idx]^2)/Nmask
+        # If masked out, assign typemax/typemin so they naturally fail min/max comparisons
+        shared_min[tid] = is_valid ? val : typemax(eltype(B))
+        shared_max[tid] = is_valid ? val : typemin(eltype(B))
+        shared_sum[tid] = is_valid ? (Gx[idx]^2 + Gy[idx]^2 + Gz[idx]^2)/Nmask : 0.0f0
     end
-   
-    # Aseguramos que toda la memoria termino de ser cargada
     sync_threads()
 
-    # Tree Reduction
+    # 3. Clean Tree Reduction (No 0.0 checks needed!)
     s = blockDim().x ÷ 2
     while s > 0
         if tid <= s
-            if shared_min[tid] == 0.0
-                shared_min[tid] = shared_min[tid + s]
-            elseif shared_min[tid + s] == 0.0
-            else
-                shared_min[tid] = min(shared_min[tid], shared_min[tid + s])
-            end
+            shared_min[tid] = min(shared_min[tid], shared_min[tid + s])
             shared_max[tid] = max(shared_max[tid], shared_max[tid + s])
             shared_sum[tid] += shared_sum[tid + s]
         end
@@ -277,7 +270,7 @@ function _metrics!(B, by_min, by_max, grad_rms, Gx, Gy, Gz, mask, N, Nmask)
         s ÷= 2
     end
 
-    # Updates to Global Memory
+    # 4. Updates to Global Memory
     if tid == 1
         CUDA.@atomic by_min[] = min(by_min[], shared_min[1])
         CUDA.@atomic by_max[] = max(by_max[], shared_max[1])
