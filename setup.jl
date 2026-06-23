@@ -13,7 +13,7 @@ const DISC_5 = true      # Las rotaciones de cada iman solo pueden ser un cm
 #const λ  = 0.5           # peso RMS(∂B/∂*) en mT/m (solo cascarón)en nuestra funcion objetivo este es el λ
 const w = 1.0            # peso rango (max-min)/mean en mT (solo cascarón) en nuestra funcion objetivo esto es 1
 
-mode = "RMS"            # RMS o STDIV
+mode = "STDIV" #"RMS"            # RMS o STDIV
 const BATCH_M = 64
 
 
@@ -41,9 +41,9 @@ Rmax = 100.0 # mm
 
 # Definir los anillos en las bandejas en los que pondremos imanes para hacer shimming mas los que están usados
 positions_in_tray_occupied   = Int[]                 # los que ya están
-#positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
+positions_in_tray_new_wished = [-14, -6, 6, 14]      # los que queremos ocupar
 #positions_in_tray_new_wished = [-6, -4, -2, 2, 4, 6] 
-positions_in_tray_new_wished = vcat(-6:-1, 1:6)       # 42 anillos
+#positions_in_tray_new_wished = vcat(-6:-1, 1:6)       # 42 anillos
 title_1 = "posiciones_imanes_shimming"               # nombre de la figura
 
 
@@ -76,11 +76,12 @@ dims = size(fieldmap)
 
 posiciones = positions_from_rings_mm(positions_in_tray_new_wished;
     occupied_trays         = positions_in_tray_occupied,
-    shim_radius_mm         = 275.0,
+    shim_radius_mm         = 231.0,
     mags_per_segment       = 7,
     num_segments           = 12,
     angle_per_segment_deg  = 2*(180 - 169.68),
-    angular_offset_deg     = 0.0)
+    angular_offset_deg     = 0.0,
+    half_shift_mm          = 0.0)
 Nmagshim = length(posiciones)
 
 lower = fill(0.0,   Nmagshim)                  # grados

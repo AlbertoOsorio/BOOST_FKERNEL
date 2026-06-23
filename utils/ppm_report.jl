@@ -4,14 +4,14 @@ include("wrap.jl")
 include("../kernels/f_kernel.jl")
 
 
-function get_ppm_RMS(bestθ, λ, final_state)
+function get_ppm_RMS(bestθ, λ, final_state, save_name)
     by_mean = CuArray([0.0f0])
     RMS_operation(bestθ, λ, final_state)
     @cuda threads=threads blocks=blocks shmem=shmem_sum   _mean!(B, by_mean, N, Nmsk)
 
     B_res = Array(B)
 
-    for i = 1:201
+    for i = 1:128
        slice = B_res[:,:,i]
         mask_slice = dmask[:,:,i]
 
@@ -43,10 +43,10 @@ function get_ppm_RMS(bestθ, λ, final_state)
         
         Colorbar(fig[1, 2], hm, label = "mT")
 
-        dir = string("runs/test_singlering/imgs/")
+        dir = string("runs/$save_name/imgs/")
         mkpath(dir) 
 
-        save(string("runs/test_singlering/imgs/","$(i)_slice.png"), fig)
+        save(string("runs/$save_name/imgs/","$(i)_slice.png"), fig)
     end
 
     return 1000000 * (by_max - by_min) / by_mean

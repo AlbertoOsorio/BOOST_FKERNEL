@@ -41,11 +41,12 @@ function positions_from_rings_mm(wished_trays::AbstractVector{<:Integer};
                                  mags_per_segment::Integer = 6,
                                  num_segments::Integer = 12,
                                  angle_per_segment_deg::Real = 2*(180 - 169.68),
-                                 angular_offset_deg::Real = 0.0)
+                                 angular_offset_deg::Real = 0.0,
+                                 half_shift_mm=5.0)
 
     # 1) trays válidos y posiciones axiales (mm)
     free_trays = wished_trays #filter_free_trays(wished_trays, occupied_trays)
-    ring_z_mm  = ringpos_from_tray_mm(free_trays, half_shift_mm=0.0)  # mm
+    ring_z_mm  = ringpos_from_tray_mm(free_trays, half_shift_mm=half_shift_mm)  # mm
 
     # 2) ángulos por segmento y por imán (grados)
     segment_angles_deg = collect(range(0, stop=360, length=num_segments+1))[1:end-1]
